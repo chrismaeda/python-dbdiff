@@ -1,19 +1,34 @@
 from schema.mysql import MySQLDatabase
 from datacompare.tablediff import TableDiff
+from util.database_credentials import read_credentials_file
+from typing import List
+
 import sys
 
 db1 = None
 db2 = None
+tablediff = None
 
-db1 = MySQLDatabase('source_db')
-db1.connect(host='src_host',user='src_user',password='src_password')
-db1.import_schema(db1.name)
-
-db2 = MySQLDatabase('dest_db')
-db2.connect(host='dest_host', user='dest_user', password='dest_password')
-db2.import_schema(db2.name)
-
-tablediff = TableDiff(db1, db2)
+def parse_args(args:List[str]):
+    # first arg is env file
+    if len(args) < 3:
+        print('Usage: %s db1.env db2.env', args[0])
+    # init db1
+    db1envfile = args[1]
+    db1env = read_credentials_file(db1envfile)
+    db1name = db1env['database']
+    db1 = MySQLDatabase(db1name)
+    db1.connect(**db1env)
+    db1.import_schema(db1name)
+    # init db2
+    db2envfile = args[2]
+    db2env = read_credentials_file(db2envfile)
+    db2name = db2env['database']
+    db2 = MySQLDatabase(db2name)
+    db2.connect(**db2env)
+    db2.import_schema(db2name)
+    diff = TableDiff(db1, db2)
+    return db1, db2, diff
 
 def maindata(argv):
     table_list = None
@@ -38,4 +53,5 @@ def maindata(argv):
             print("\n")
 
 if __name__ == "__main__":
-    maindata(sys.argv[1:])
+    db1, db2, tablediff = parse_args(sys.argv)
+    maindata(sys.argv[3:])

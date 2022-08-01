@@ -1,23 +1,48 @@
 from schema.mysql import MySQLDatabase
 from schema.compare import SchemaCompare
-
-db1 = None
-db2 = None
-
-db1 = MySQLDatabase('source_db')
-db1.connect(host='src_host',user='src_user',password='src_password')
-db1.import_schema(db1.name)
-
-db2 = MySQLDatabase('dest_db')
-db2.connect(host='dest_host', user='dest_user', password='dest_password')
-db2.import_schema(db2.name)
+from util.database_credentials import read_credentials_file
+from typing import List
+import sys
 
 #
 # execute schema compare
 #
-cmp = SchemaCompare(db1, db2)
+
+db1 = None
+db2 = None
+cmp = None
+
+#db1 = MySQLDatabase('source_db')
+#db1.connect(host='src_host',user='src_user',password='src_password')
+#db1.import_schema(db1.name)
+
+#db2 = MySQLDatabase('dest_db')
+#db2.connect(host='dest_host', user='dest_user', password='dest_password')
+#db2.import_schema(db2.name)
+
+def parse_args(args:List[str]):
+    # first arg is env file
+    if len(args) < 3:
+        print('Usage: %s db1.env db2.env', args[0])
+    # init db1
+    db1envfile = args[1]
+    db1env = read_credentials_file(db1envfile)
+    db1name = db1env['database']
+    db1 = MySQLDatabase(db1name)
+    db1.connect(**db1env)
+    db1.import_schema(db1name)
+    # init db2
+    db2envfile = args[2]
+    db2env = read_credentials_file(db2envfile)
+    db2name = db2env['database']
+    db2 = MySQLDatabase(db2name)
+    db2.connect(**db2env)
+    db2.import_schema(db2name)
+    cmp = SchemaCompare(db1, db2)
+    return db1, db2, cmp
 
 def diff_tables():
+
     tabsboth, tabsonly1, tabsonly2 = cmp.diff_table_list()
     for table in tabsboth:
         print('TABLE: ' + table)
@@ -105,5 +130,6 @@ def diff_procs():
             print("\t" + procname)
 
 if __name__ == "__main__":
+    db1, db2, cmp = parse_args(sys.argv)
     diff_tables()
     diff_procs()
