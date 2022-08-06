@@ -135,6 +135,15 @@ class Table:
         self.auto_increment = None
         self.table_collation = None        
 
+    def get_columns(self) -> List[Column]:
+        return self.columns
+
+    def get_constraints(self) -> List[Constraint]:
+        return self.constraints
+
+    def get_indexes(self) -> List[Index]:
+        return self.indexes
+
     def get_column(self, name) -> Column:
         match = None
         for column in self.columns:
@@ -181,7 +190,7 @@ class Table:
                 only2.append(col2)
         return same, notsame, only1, only2
 
-    def diff_indexes(self, table):
+    def diff_indexes(self, table) -> Tuple[List[Index],List[Index],List[Index],List[Index]]:
         same = []
         notsame = []
         only1 = []

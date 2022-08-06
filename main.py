@@ -135,10 +135,9 @@ def table_list(db:Database, canonicalize=None):
     sorted = TopoSort.sort(tabledict.values())
     for table in sorted:
         print(table.name + ': columns ' + str(len(table.columns)))
-        tabcons = table.constraints
+        tabcons = table.get_constraints()
         for tabcon in tabcons:
-            ctype = tabcon.type
-            if ctype == 'FOREIGN KEY':
+            if tabcon.is_foreign_key():
                 print('\tFK -> ' + str(tabcon.reference_table))
 
 
