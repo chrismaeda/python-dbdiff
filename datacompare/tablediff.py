@@ -45,7 +45,9 @@ class TableDiff:
         # build a dict for each table that contains all records
         #
         rows1 = self.db1.fetch_table_rows(tablename, where, orderby)
+        print("\tFetched " + str(len(rows1)) + " from DB1")
         rows2 = self.db2.fetch_table_rows(tablename, where, orderby)
+        print("\tFetched " + str(len(rows2)) + " from DB2")
         return rows1, rows2, pk1
 
     def diff_rows(self, tablename:str, where:str = None, orderby:str = None):

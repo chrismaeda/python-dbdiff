@@ -1,49 +1,27 @@
+from mysqlx import Schema
+from schema import Database
 from schema.mysql import MySQLDatabase
-from schema.compare import SchemaCompare
+from schema.compare import SchemaCompare, TopoSort
 from util.database_credentials import read_credentials_file
 from typing import List
-import sys
+import click
 
 #
 # execute schema compare
 #
 
-db1 = None
-db2 = None
-cmp = None
+def read_database_from_env(envfile) -> Database:
+    dbenv = read_credentials_file(envfile)
+    dbname = dbenv['database']
+    db = MySQLDatabase(dbname)
+    db.connect(**dbenv)
+    db.import_schema(dbname)
+    return db
 
-#db1 = MySQLDatabase('source_db')
-#db1.connect(host='src_host',user='src_user',password='src_password')
-#db1.import_schema(db1.name)
-
-#db2 = MySQLDatabase('dest_db')
-#db2.connect(host='dest_host', user='dest_user', password='dest_password')
-#db2.import_schema(db2.name)
-
-def parse_args(args:List[str]):
-    # first arg is env file
-    if len(args) < 3:
-        print('Usage: %s db1.env db2.env', args[0])
-    # init db1
-    db1envfile = args[1]
-    db1env = read_credentials_file(db1envfile)
-    db1name = db1env['database']
-    db1 = MySQLDatabase(db1name)
-    db1.connect(**db1env)
-    db1.import_schema(db1name)
-    # init db2
-    db2envfile = args[2]
-    db2env = read_credentials_file(db2envfile)
-    db2name = db2env['database']
-    db2 = MySQLDatabase(db2name)
-    db2.connect(**db2env)
-    db2.import_schema(db2name)
+def diff_schema(db1:Database, db2:Database):
     cmp = SchemaCompare(db1, db2)
-    return db1, db2, cmp
-
-def diff_tables():
-
     tabsboth, tabsonly1, tabsonly2 = cmp.diff_table_list()
+
     for table in tabsboth:
         print('TABLE: ' + table)
         tbl1 = cmp.db1.get_table(table)
@@ -111,7 +89,8 @@ def diff_tables():
         for table in tabsonly2:
             print("\t" + table)
 
-def diff_procs():
+def diff_procs(db1:Database, db2:Database):
+    cmp = SchemaCompare(db1, db2)
     both, only1, only2 = cmp.diff_procedure_list()
     for procname in both:
         proc1 = cmp.db1.get_procedure(procname)
@@ -129,7 +108,74 @@ def diff_procs():
         for procname in only2:
             print("\t" + procname)
 
+def table_list(db:Database, canonicalize=None):
+    tablelist = db.get_table_list()
+    tabledict = {}
+    for tablename in tablelist:
+        if canonicalize is None:
+            tablenamekey = tablename
+        else:
+            tablenamekey = canonicalize(tablename)
+        table = db.get_table(tablenamekey)
+        if table is None:
+            raise Exception('No Table ' + tablenamekey)
+        if tablenamekey not in tabledict:
+            tabledict[tablenamekey] = table
+
+    # sort tables in dependency order (topological sort)
+    sorted = TopoSort.sort(tabledict.values())
+    for table in sorted:
+        print(table.name + ': columns ' + str(len(table.columns)))
+        tabcons = table.constraints
+        for tabcon in tabcons:
+            ctype = tabcon.type
+            if ctype == 'FOREIGN KEY':
+                print('\tFK -> ' + str(tabcon.reference_table))
+
+
+def str_upper(s:str) -> str:
+    return s.upper()
+
+def str_lower(s:str) -> str:
+    return s.lower()
+
+@click.group()
+def schemadiff():
+    pass
+
+@click.command()
+@click.argument('db1')
+@click.argument('db2')
+def diffschema(db1, db2):
+    dbobj1 = read_database_from_env(db1)
+    dbobj2 = read_database_from_env(db2)
+    diff_schema(dbobj1, dbobj2)
+
+@click.command()
+@click.argument('db1')
+@click.argument('db2')
+def diffprocs(db1, db2):
+    dbobj1 = read_database_from_env(db1)
+    dbobj2 = read_database_from_env(db2)
+    diff_procs(dbobj1, dbobj2)
+
+@click.command()
+@click.argument('db')
+@click.option('--uppercase', '--upper', default=False)
+@click.option('--lowercase', '--lower', default=False)
+def tablelist(db, uppercase, lowercase):
+    dbobj = read_database_from_env(db)
+    canonicalize = None
+    if uppercase:
+        canonicalize = str_upper
+    elif lowercase:
+        canonicalize = str_lower
+    table_list(dbobj, canonicalize)
+
+
+schemadiff.add_command(diffschema)
+schemadiff.add_command(diffprocs)
+schemadiff.add_command(tablelist)
+
 if __name__ == "__main__":
-    db1, db2, cmp = parse_args(sys.argv)
-    diff_tables()
-    diff_procs()
+    schemadiff()

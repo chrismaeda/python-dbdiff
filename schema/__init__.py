@@ -117,6 +117,11 @@ class Constraint:
         except:
             return False
 
+    def is_foreign_key(self) -> bool:
+        return False
+
+    def is_primary_key(self) -> bool:
+        return False
 
 class Table:
     def __init__(self, name, schema=None, rows=None):
@@ -237,4 +242,7 @@ class Database:
         return None
 
     def fetch_table_rows(self, tablename:str, where:str, orderby:str) -> List[Dict]:
+        return None
+
+    def fetch_table_rowcount(self, tablename:str, where:str) -> int:
         return None

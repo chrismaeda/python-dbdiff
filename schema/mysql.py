@@ -67,6 +67,11 @@ class MySQLConstraint(Constraint):
     def __init__(self, TABLE_NAME, CONSTRAINT_NAME, CONSTRAINT_TYPE):
         super().__init__(name=CONSTRAINT_NAME, type=CONSTRAINT_TYPE, table=TABLE_NAME)
 
+    def is_primary_key(self):
+        return self.type == 'PRIMARY KEY'
+
+    def is_foreign_key(self):
+        return self.type == 'FOREIGN KEY'
 
 class MySQLIndex(Index):
     def __init__(self, name, tableName, unique=False):
@@ -168,6 +173,16 @@ class MySQLDatabase(Database):
             for row in cursor:
                 rows.append(row)
         return rows
+
+    def fetch_table_rowcount(self, tablename: str, where: str = None) -> int:
+        query = 'SELECT COUNT(*) FROM ' + tablename
+        if where is not None:
+            query = query + ' WHERE ' + where
+        with self.conn.cursor() as cursor:
+            cursor.execute(query)
+            row = cursor.fetchone()
+            rowcount = row[0]
+        return rowcount
 
     def fetch_tables(self, dbname) -> List[Table]:
         dbname = dbname or self.name

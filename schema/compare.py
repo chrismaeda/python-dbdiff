@@ -3,7 +3,7 @@
 #
 
 from typing import List, Tuple
-from schema import Database
+from schema import Database, Table
 
 class SchemaCompare:
     def __init__(self, db1: Database, db2: Database) -> None:
@@ -45,3 +45,51 @@ class SchemaCompare:
             if procname not in db1_procs:
                 only2.append(procname)
         return both, only1, only2
+
+# Technically, this is a reverse topological sort since
+# a table A with a foreign key link to table B would
+# be modeled as a graph edge from A to B.
+# reference: https://en.wikipedia.org/wiki/Topological_sorting
+class TopoSort:
+    @classmethod
+    def sort(self, tables:List[Table]) -> List[Table]:
+        # get list of tables with no dependencies
+        sorted = []
+        visited = {}
+        nodelist = []
+
+        # step 1: find tables with no foreign key dependencies
+        for table in tables:
+            hasfk = False
+            for constraint in table.constraints:
+                if constraint.is_foreign_key():
+                    hasfk = True
+                    break
+            if not hasfk:
+                sorted.append(table)
+                visited[table.name] = table
+            else:
+                nodelist.append(table)
+
+        # step 2: scan nodelist, adding nodes to sorted in topo order
+        while len(nodelist) > 0:
+            #print('Sorted:' + str(len(sorted_dict)) + ' Work:' + str(len(fklist)))
+            for table in nodelist:
+                all_deps_visited = True
+                # check if table dependencies are already visited
+                for constr in table.constraints:
+                    if constr.is_foreign_key():
+                        #print(table.name + '->' + constr.reference_table)
+                        reftable = constr.reference_table
+                        # note: must detect and ignore self-referential fk links
+                        #   since this is a dependency loop that will break the algorithm
+                        if reftable not in visited and reftable != table.name:
+                            #print(reftable + ' not visited')
+                            all_deps_visited = False
+                            break
+                if all_deps_visited:
+                    # all dependencies of table are in the sorted list
+                    sorted.append(table)
+                    visited[table.name] = table
+                    nodelist.remove(table)
+        return sorted

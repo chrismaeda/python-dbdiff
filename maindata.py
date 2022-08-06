@@ -1,43 +1,43 @@
 from schema.mysql import MySQLDatabase
+from schema import Database
 from datacompare.tablediff import TableDiff
+from datacompare.dbscan import DatabaseScan
 from util.database_credentials import read_credentials_file
-from typing import List
+from typing import List, Tuple
+import click
 
-import sys
+def read_database_from_env(envfile) -> Database:
+    dbenv = read_credentials_file(envfile)
+    dbname = dbenv['database']
+    db = MySQLDatabase(dbname)
+    db.connect(**dbenv)
+    db.import_schema(dbname)
+    return db
 
-db1 = None
-db2 = None
-tablediff = None
-
-def parse_args(args:List[str]):
-    # first arg is env file
-    if len(args) < 3:
-        print('Usage: %s db1.env db2.env', args[0])
-    # init db1
-    db1envfile = args[1]
-    db1env = read_credentials_file(db1envfile)
-    db1name = db1env['database']
-    db1 = MySQLDatabase(db1name)
-    db1.connect(**db1env)
-    db1.import_schema(db1name)
-    # init db2
-    db2envfile = args[2]
-    db2env = read_credentials_file(db2envfile)
-    db2name = db2env['database']
-    db2 = MySQLDatabase(db2name)
-    db2.connect(**db2env)
-    db2.import_schema(db2name)
-    diff = TableDiff(db1, db2)
-    return db1, db2, diff
-
-def maindata(argv):
+def maindata(db1:Database, db2:Database, tablelist:Tuple[str]):
+    tablediff = TableDiff(db1, db2)    
     table_list = None
-    if len(argv) == 0:
+    if len(tablelist) == 0:
         # diff all tables
         table_list = tablediff.db1.get_table_list()
     else:
-        table_list = argv
+        table_list = list(tablelist)
+
+    tables_only1 = []
+    tables_only2 = []
     for tablename in table_list:
+        print("CHECK TABLE " + tablename)
+        # check that table exists in both databases
+        db1table = db1.get_table(tablename)
+        db2table = db2.get_table(tablename)
+        if db1table is None and db2table is not None:
+            tables_only2.append(tablename)
+            continue
+        elif db1table is not None and db2table is None:
+            tables_only1.append(tablename)
+            continue
+
+        # table exists in both databases so diff the rows...
         sames, diffs, only1, only2 = tablediff.diff_rows(tablename)
         if len(diffs) == 0 and len(only1) == 0 and len(only2) == 0:
             print("TABLE: " + tablename + " " + str(len(sames)) + " ROWS MATCH!")
@@ -51,7 +51,52 @@ def maindata(argv):
             if len(only2) > 0:
                 print("\tOnly in DB2 COUNT: " + str(len(only2)))
             print("\n")
+    # print tables only in one db or the other
+    if len(tables_only1) > 0:
+        print("\nTABLES ONLY IN DB1\n")
+        for db1table in tables_only1:
+            print("\t" + db1table)
+    if len(tables_only2) > 0:
+        print("\nTABLES ONLY IN DB2\n")
+        for db2table in tables_only2:
+            print("\t" + db2table)
+
+
+def dbreport(db:Database, tablelist:Tuple[str]):
+    dbscan = DatabaseScan(db)
+    table_list = None
+    if len(tablelist) == 0:
+        # diff all tables
+        table_list = db.get_table_list()
+    else:
+        table_list = list(tablelist)
+    for tablename in table_list:
+        dbscan.table_report(tablename)
+
+
+@click.group()
+def datadiff():
+    pass
+
+@click.command()
+@click.argument('db1')
+@click.argument('db2')
+@click.argument('tablelist', nargs=-1)  # varargs
+def tablediff(db1, db2, tablelist):
+    dbobj1 = read_database_from_env(db1)
+    dbobj2 = read_database_from_env(db2)
+    maindata(dbobj1, dbobj2, tablelist)
+
+@click.command()
+@click.argument('db')
+@click.argument('tablelist', nargs=-1)  # varargs
+def tablereport(db, tablelist):
+    dbobj = read_database_from_env(db)
+    dbreport(dbobj,tablelist)
+
+
+datadiff.add_command(tablediff)
+datadiff.add_command(tablereport)
 
 if __name__ == "__main__":
-    db1, db2, tablediff = parse_args(sys.argv)
-    maindata(sys.argv[3:])
+    datadiff()
