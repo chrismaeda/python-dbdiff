@@ -28,7 +28,7 @@ def diff_schema(db1:Database, db2:Database):
         tbl2 = cmp.db2.get_table(table)
         tsame, tdiff, tonly1, tonly2 = tbl1.diff_columns(tbl2)
         if len(tsame) >= 0 and len(tdiff) == 0 and len(tonly1) == 0 and len(tonly2) == 0:
-            print("\tCOLUMNS MATCH!")
+            print("\tALL COLUMNS MATCH!")
         else:
             print("\tSame Columns:" + str(len(tsame)))
             if len(tdiff) > 0:
@@ -48,7 +48,7 @@ def diff_schema(db1:Database, db2:Database):
         # diff constraints
         csame, cdiff, conly1, conly2 = tbl1.diff_constraints(tbl2)
         if len(csame) >= 0 and len(cdiff) == 0 and len(conly1) == 0 and len(conly2) == 0:
-            print("\tCONSTRAINTS MATCH!")
+            print("\tALL CONSTRAINTS MATCH!")
         else:
             if len(csame) > 0:
                 cnames = [ c.name for c in csame ]
@@ -65,7 +65,7 @@ def diff_schema(db1:Database, db2:Database):
         # diff indexes
         isame, idiff, ionly1, ionly2 = tbl1.diff_indexes(tbl2)
         if len(isame) >= 0 and len(idiff) == 0 and len(ionly1) == 0 and len(ionly2) == 0:
-            print("\tINDEXES MATCH!")
+            print("\tALL INDEXES MATCH!")
         else:
             if len(isame) > 0:
                 inames = [ ix.name for ix in isame ]
@@ -108,6 +108,14 @@ def diff_procs(db1:Database, db2:Database):
         for procname in only2:
             print("\t" + procname)
 
+# This method returns a list of tables in reverse-dependency order.
+# i.e. If table A has a foreign key link to table B, it will print B,A
+# This is the order in which to save or restore the tables without breaking FK links.
+#
+# The canonicalize argument (if provided) will convert table names to canonical form
+# and ignore duplicate tables with the same canonical name.  This is intended to deal
+# with some corrupted mysql databases where there are duplicate tables with names
+# like 'DATA_TABLE' and 'data_table'.
 def table_list(db:Database, canonicalize=None):
     tablelist = db.get_table_list()
     tabledict = {}
@@ -119,6 +127,7 @@ def table_list(db:Database, canonicalize=None):
         table = db.get_table(tablenamekey)
         if table is None:
             raise Exception('No Table ' + tablenamekey)
+        # if canonicalize(tablename) is already in tabledict then ignore it
         if tablenamekey not in tabledict:
             tabledict[tablenamekey] = table
 

@@ -206,40 +206,12 @@ class MySQLDatabase(Database):
                 columns.append(column)
             return columns
 
-    def fetch_indexes(self, dbname) -> List[Index]:
+    def fetch_index_columns(self, dbname) -> List[Index]:
         dbname = dbname or self.name
         with self.conn.cursor(dictionary=True) as cursor:
             cursor.execute(mysql_indexes_query, (dbname,))
             dbrows = cursor.fetchall()
-
-            #
-            # this loop assumes the index column records are sorted
-            # see the order by clause of the indexes query
-            #
-            indexes = []
-            index = None
-            for dbrow in dbrows:
-                indexName = dbrow['INDEX_NAME']
-
-                # find or create index object
-                if index == None or index.name != indexName:
-                    # create new index object
-                    tableName = dbrow['TABLE_NAME']
-                    nonUnique = dbrow['NON_UNIQUE']
-                    isUnique = nonUnique == 0
-                    index = MySQLIndex(indexName, tableName, isUnique)
-                    indexes.append(index)
-
-                # add column to index
-                colName = dbrow['COLUMN_NAME']
-                collation = dbrow['COLLATION']
-                subpart = dbrow['SUB_PART']
-                nullable = dbrow['NULLABLE']
-                # convert nullable to boolean
-                nullable = nullable == 'YES'
-                position = dbrow['SEQ_IN_INDEX']
-                index.add_column(colName, collation, nullable, subpart, position)
-            return indexes
+            return dbrows
 
     def fetch_constraints(self, dbname) -> List[Constraint]:
         dbname = dbname or self.name
@@ -312,15 +284,34 @@ class MySQLDatabase(Database):
                 raise ValueError(tablename)
             table.columns.append(dbcolumn)
 
-        # import indexes
-        dbindexes = self.fetch_indexes(self.name)
-        for dbindex in dbindexes:
-            tablename = dbindex.tableName
-            idxname = dbindex.name
-            basetable = self.get_table(tablename)
-            if basetable is None:
-                raise ValueError('index ' + idxname + ' missing table ' + tablename)
-            basetable.indexes.append(dbindex)
+        # import index columns
+        dbindexrows = self.fetch_index_columns(self.name)
+        for dbrow in dbindexrows:
+            tablename = dbrow['TABLE_NAME']
+            indexName = dbrow['INDEX_NAME']
+            nonUnique = dbrow['NON_UNIQUE']
+            colName = dbrow['COLUMN_NAME']
+            collation = dbrow['COLLATION']
+            subpart = dbrow['SUB_PART']
+            nullable = dbrow['NULLABLE']
+            position = dbrow['SEQ_IN_INDEX']
+
+            # find table
+            table = self.get_table(tablename)
+            if table == None:
+                raise ValueError(tablename)
+            # find or create index in table
+            index = table.get_index(indexName)
+            if index == None:
+                # create new index object
+                isUnique = nonUnique == 0
+                index = MySQLIndex(indexName, tablename, isUnique)
+                table.indexes.append(index)
+
+            # add column to index
+            # convert nullable to boolean
+            nullable = (nullable == 'YES')
+            index.add_column(colName, collation, nullable, subpart, position)
 
         # import constraints
         dbconstraints = self.fetch_constraints(self.name)
