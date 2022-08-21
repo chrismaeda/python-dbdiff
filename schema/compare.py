@@ -6,27 +6,46 @@ from typing import List, Tuple
 from schema import Database, Table
 
 class SchemaCompare:
-    def __init__(self, db1: Database, db2: Database) -> None:
+    def __init__(self, db1: Database, db2: Database, canonicalize=None) -> None:
         self.db1 = db1
         self.db2 = db2 
+        self.canonicalize = canonicalize
 
     # compare table sets in each db
     # return tables in both, tables only in 1, tables only in 2
-    def diff_table_list(self) -> Tuple[List[str], List[str], List[str]]:
+    def diff_table_list(self) -> Tuple[List[Tuple], List[Tuple], List[Tuple]]:
         both = []
         only1 = []
         only2 = []
         db1_tables = self.db1.get_table_list()
         db2_tables = self.db2.get_table_list()
 
-        for tablename in db1_tables:
-            if tablename in db2_tables:
-                both.append(tablename)
-            else:
-                only1.append(tablename)
-        for tablename in db2_tables:
-            if tablename not in db1_tables:
-                only2.append(tablename)
+        # convert each table name to a tuple of ( canonicalized name, original name)
+        if self.canonicalize is None:
+            db1_tables = [ (table, table) for table in db1_tables ]
+            db2_tables = [ (table, table) for table in db2_tables ]
+        else:
+            db1_tables = [ (self.canonicalize(table), table) for table in db1_tables ]
+            db2_tables = [ (self.canonicalize(table), table) for table in db2_tables ]
+            
+        for canontable,origtable in db1_tables:
+            tablefound = False
+            for canon2,orig2 in db2_tables:
+                if canontable == canon2:
+                    both.append((origtable,orig2))
+                    tablefound = True
+                    break
+            if not tablefound:
+                only1.append((canontable,origtable))
+
+        for canon2,orig2 in db2_tables:
+            tablefound = False
+            for canon1,orig1 in db1_tables:
+                if canon1 == canon2:
+                    tablefound = True
+                    break
+            if not tablefound:
+                only2.append((canon2,orig2))
         return both, only1, only2
 
     def diff_procedure_list(self) -> Tuple[List[str], List[str], List[str]]:

@@ -3,7 +3,7 @@
 #
 
 from typing import Dict, List, Tuple
-
+import copy
 
 class Column:
     def __init__(self, name, type, tableName=None, nullable=True, primaryKey=False, defaultValue=None, constraints=None, position=None):
@@ -46,6 +46,12 @@ class Column:
                 diff2[key] = val2
         return True, diff1, diff2
 
+    # copy this object, optionally converting table names to canonical form
+    def copy(self, canonicalize=None):
+        colcopy = copy.deepcopy(self)
+        if canonicalize is not None:
+            colcopy.tableName = canonicalize(colcopy.tableName)
+        return colcopy
 
 class Index:
     def __init__(self, name, tableName):
@@ -94,6 +100,13 @@ class Index:
                 only2.append(col2)
         return sames, diffs, only1, only2
 
+    # copy this object, optionally converting table names to canonical form
+    def copy(self, canonicalize=None):
+        idxcopy = copy.deepcopy(self)
+        if canonicalize is not None:
+            idxcopy.tableName = canonicalize(idxcopy.tableName)
+        return idxcopy
+
 
 class Constraint:
     def __init__(self, name:str=None, type:str=None, table:str=None):
@@ -123,6 +136,17 @@ class Constraint:
     def is_primary_key(self) -> bool:
         return False
 
+    # copy this object, optionally converting table names to canonical form
+    def copy(self, canonicalize=None):
+        concopy = copy.deepcopy(self)
+        if canonicalize is not None:
+            if concopy.table is not None:
+                concopy.table = canonicalize(concopy.table)
+            if concopy.reference_table is not None:
+                concopy.reference_table = canonicalize(concopy.reference_table)
+        return concopy
+
+
 class Table:
     def __init__(self, name, schema=None, rows=None):
         self.name = name
@@ -144,7 +168,7 @@ class Table:
     def get_indexes(self) -> List[Index]:
         return self.indexes
 
-    def get_column(self, name) -> Column:
+    def get_column(self, name:str) -> Column:
         match = None
         for column in self.columns:
             if column.name == name:
@@ -152,13 +176,13 @@ class Table:
                 break
         return match
 
-    def get_constraint(self, name) -> Constraint:
+    def get_constraint(self, name:str) -> Constraint:
         for constraint in self.constraints:
             if constraint.name == name:
                 return constraint
         return None
 
-    def get_index(self, name) -> Index:
+    def get_index(self, name:str) -> Index:
         for index in self.indexes:
             if index.name == name:
                 return index
@@ -168,18 +192,25 @@ class Table:
         pklist = [ col for col in self.columns if col.primaryKey ]
         return pklist
 
-    def diff_columns(self, table) -> Tuple[List[Column],List[Column],List[Column],List[Column]]:
+    def diff_columns(self, table, canonicalize=None) -> Tuple[List[Column],List[Column],List[Column],List[Column]]:
         same = []
         notsame = []
         only1 = []
         only2 = []
-        for col in self.columns:
+        for col in self.get_columns():
             colname = col.name
             table2col = table.get_column(colname)
             if table2col is None:
                 only1.append(col)
             elif col == table2col:
                 same.append(col)
+            elif canonicalize is not None:
+                col1copy = col.copy(canonicalize=canonicalize)
+                col2copy = table2col.copy(canonicalize=canonicalize)
+                if col1copy == col2copy:
+                    same.append(col)
+                else:
+                    notsame.append(col)    
             else:
                 notsame.append(col)
         # check for only2 columns
@@ -190,18 +221,25 @@ class Table:
                 only2.append(col2)
         return same, notsame, only1, only2
 
-    def diff_indexes(self, table) -> Tuple[List[Index],List[Index],List[Index],List[Index]]:
+    def diff_indexes(self, table, canonicalize=None) -> Tuple[List[Index],List[Index],List[Index],List[Index]]:
         same = []
         notsame = []
         only1 = []
         only2 = []
-        for idx in self.indexes:
+        for idx in self.get_indexes():
             idxname = idx.name
             tab2idx = table.get_index(idxname)
             if tab2idx is None:
                 only1.append(idx)
             elif idx == tab2idx:
                 same.append(idx)
+            elif canonicalize is not None:
+                idx1copy = idx.copy(canonicalize=canonicalize)
+                idx2copy = tab2idx.copy(canonicalize=canonicalize)
+                if idx1copy == idx2copy:
+                    same.append(idx)
+                else:
+                    notsame.append(idx)    
             else:
                 notsame.append(idx)
         # check for only2 columns
@@ -212,18 +250,25 @@ class Table:
                 only2.append(idx2)
         return same, notsame, only1, only2
 
-    def diff_constraints(self, table) -> Tuple[List[Constraint],List[Constraint],List[Constraint],List[Constraint]]:
+    def diff_constraints(self, table, canonicalize=None) -> Tuple[List[Constraint],List[Constraint],List[Constraint],List[Constraint]]:
         same = []
         notsame = []
         only1 = []
         only2 = []
-        for con in self.constraints:
+        for con in self.get_constraints():
             conname = con.name
             tab2con = table.get_constraint(conname)
             if tab2con is None:
                 only1.append(con)
             elif con == tab2con:
                 same.append(con)
+            elif canonicalize is not None:
+                con1copy = con.copy(canonicalize=canonicalize)
+                con2copy = tab2con.copy(canonicalize=canonicalize)
+                if con1copy == con2copy:
+                    same.append(con)
+                else:
+                    notsame(con)
             else:
                 notsame.append(con)
         # check for only2 columns
@@ -241,7 +286,7 @@ class Database:
     def get_table(self, tablename) -> Table:
         return None
 
-    def get_table_list(self) -> List[str]:
+    def get_table_list(self, canonicalize=None) -> List[str]:
         return None
 
     def get_procedure_list(self) -> List[str]:

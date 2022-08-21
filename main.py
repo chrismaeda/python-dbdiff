@@ -18,15 +18,15 @@ def read_database_from_env(envfile) -> Database:
     db.import_schema(dbname)
     return db
 
-def diff_schema(db1:Database, db2:Database):
-    cmp = SchemaCompare(db1, db2)
+def diff_schema(db1:Database, db2:Database, canonicalize=None):
+    cmp = SchemaCompare(db1, db2, canonicalize=canonicalize)
     tabsboth, tabsonly1, tabsonly2 = cmp.diff_table_list()
 
-    for table in tabsboth:
-        print('TABLE: ' + table)
-        tbl1 = cmp.db1.get_table(table)
-        tbl2 = cmp.db2.get_table(table)
-        tsame, tdiff, tonly1, tonly2 = tbl1.diff_columns(tbl2)
+    for table1,table2 in tabsboth:
+        print('TABLE: ' + table1 + ' ==? ' + table2)
+        tbl1 = cmp.db1.get_table(table1)
+        tbl2 = cmp.db2.get_table(table2)
+        tsame, tdiff, tonly1, tonly2 = tbl1.diff_columns(tbl2, canonicalize=canonicalize)
         if len(tsame) >= 0 and len(tdiff) == 0 and len(tonly1) == 0 and len(tonly2) == 0:
             print("\tALL COLUMNS MATCH!")
         else:
@@ -46,7 +46,7 @@ def diff_schema(db1:Database, db2:Database):
         if tbl1_ai != tbl2_ai:
             print("\tAUTOINCREMENT: db1:" + str(tbl1_ai) + " <> db2:" + str(tbl2_ai))
         # diff constraints
-        csame, cdiff, conly1, conly2 = tbl1.diff_constraints(tbl2)
+        csame, cdiff, conly1, conly2 = tbl1.diff_constraints(tbl2, canonicalize=canonicalize)
         if len(csame) >= 0 and len(cdiff) == 0 and len(conly1) == 0 and len(conly2) == 0:
             print("\tALL CONSTRAINTS MATCH!")
         else:
@@ -63,7 +63,7 @@ def diff_schema(db1:Database, db2:Database):
                 cnames = [ c.name for c in conly2 ]
                 print("\tOnly in DB2 Constraints:" + str(cnames))
         # diff indexes
-        isame, idiff, ionly1, ionly2 = tbl1.diff_indexes(tbl2)
+        isame, idiff, ionly1, ionly2 = tbl1.diff_indexes(tbl2, canonicalize=canonicalize)
         if len(isame) >= 0 and len(idiff) == 0 and len(ionly1) == 0 and len(ionly2) == 0:
             print("\tALL INDEXES MATCH!")
         else:
@@ -82,12 +82,12 @@ def diff_schema(db1:Database, db2:Database):
 
     if len(tabsonly1) > 0:
         print("\nTABLES ONLY IN DB1")
-        for table in tabsonly1:
-            print("\t" + table)
+        for canontable,origtable in tabsonly1:
+            print("\t" + origtable)
     if len(tabsonly2) > 0:
         print("\nTABLES ONLY IN DB2")
-        for table in tabsonly2:
-            print("\t" + table)
+        for canontable,origtable in tabsonly2:
+            print("\t" + origtable)
 
 def diff_procs(db1:Database, db2:Database):
     cmp = SchemaCompare(db1, db2)
@@ -154,10 +154,17 @@ def schemadiff():
 @click.command()
 @click.argument('db1')
 @click.argument('db2')
-def diffschema(db1, db2):
+@click.option('--uppercase', '--upper', default=False)
+@click.option('--lowercase', '--lower', default=False)
+def diffschema(db1, db2, uppercase, lowercase):
+    canonicalize = None
+    if uppercase:
+        canonicalize = str_upper
+    elif lowercase:
+        canonicalize = str_lower
     dbobj1 = read_database_from_env(db1)
     dbobj2 = read_database_from_env(db2)
-    diff_schema(dbobj1, dbobj2)
+    diff_schema(dbobj1, dbobj2, canonicalize)
 
 @click.command()
 @click.argument('db1')

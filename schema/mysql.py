@@ -147,8 +147,11 @@ class MySQLDatabase(Database):
         else:
             return None
 
-    def get_table_list(self) -> List[str]:
-        tablelist = [ table.name for table in self.tables.values() ]
+    def get_table_list(self, canonicalize=None) -> List[str]:
+        if canonicalize is None:
+            tablelist = [ table.name for table in self.tables.values() ]
+        else:
+            tablelist = [ canonicalize(table.name) for table in self.tables.values() ]
         return tablelist
 
     def get_procedure_list(self) -> List[str]:
