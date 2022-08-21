@@ -7,6 +7,9 @@ def read_credentials_file(filename:str) -> dict:
     with open(filename) as FILE:
         for line in FILE:
             line = line.strip()
+            # skip empty strings
+            if not line:
+                continue
             # skip comments
             if line.startswith('#'):
                 continue
