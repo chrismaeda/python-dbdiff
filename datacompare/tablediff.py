@@ -3,14 +3,16 @@
 #
 
 from typing import List
+from xml.etree.ElementTree import canonicalize
 from schema import Column, Database
 
 
 class TableDiff:
-    def __init__(self, db1:Database, db2:Database, verbose=False):
+    def __init__(self, db1:Database, db2:Database, verbose=False, canonicalize=None):
         self.db1 = db1
         self.db2 = db2
         self.verbose = verbose
+        self.canonicalize = canonicalize
 
     # return an immutable object that can be used as a dictionary key
     def get_row_key(self, row:dict, pklist:List[Column]):
@@ -28,32 +30,40 @@ class TableDiff:
             keytuple = tuple(keylist)
             return keytuple            
 
-    def prep_diff(self, tablename:str, where:str = None, orderby:str = None):
+    def prep_diff(self, tablename1:str, tablename2:str, where:str = None, orderby:str = None):
         # ensure table exists in both databases
-        table1 = self.db1.get_table(tablename)
+        table1 = self.db1.get_table(tablename1)
         if table1 is None:
-            raise ValueError('db1: table not found ' + tablename)
-        table2 = self.db2.get_table(tablename)
+            raise ValueError('db1: table not found ' + tablename1)
+        table2 = self.db2.get_table(tablename2)
         if table2 is None:
-            raise ValueError('db2: table not found ' + tablename)
+            raise ValueError('db2: table not found ' + tablename2)
         # collect primary key fields
         pk1 = table1.get_primary_key_columns()
         pk2 = table2.get_primary_key_columns()
         if pk1 != pk2:
-            raise ValueError('primary key column lists not equal')
+            if self.canonicalize is not None:
+                pk1copy = [ pkcol.copy(canonicalize=self.canonicalize) for pkcol in pk1 ]
+                pk2copy = [ pkcol.copy(canonicalize=self.canonicalize) for pkcol in pk2 ]
+                if pk1copy != pk2copy:
+                    raise ValueError('primary key column lists not equal (canonicalized)')
+            else:
+                raise ValueError('primary key column lists not equal')
+
         #
         # build a dict for each table that contains all records
         #
-        rows1 = self.db1.fetch_table_rows(tablename, where, orderby)
+        rows1 = self.db1.fetch_table_rows(tablename1, where, orderby)
         print("\tFetched " + str(len(rows1)) + " from DB1")
-        rows2 = self.db2.fetch_table_rows(tablename, where, orderby)
+        rows2 = self.db2.fetch_table_rows(tablename2, where, orderby)
         print("\tFetched " + str(len(rows2)) + " from DB2")
         return rows1, rows2, pk1
 
-    def diff_rows(self, tablename:str, where:str = None, orderby:str = None):
-        rows1, rows2, pklist = self.prep_diff(tablename, where, orderby)
+    def diff_rows(self, tablename1:str, tablename2:str, where:str = None, orderby:str = None):
+        rows1, rows2, pklist = self.prep_diff(tablename1, tablename2, where, orderby)
         if self.verbose:
-            print("Table " + tablename + " DB1 rows:" + str(len(rows1)) + " DB2 rows:" + str(len(rows2)))
+            print("Table " + tablename1 + " DB1 rows:" + str(len(rows1)) 
+                + "Table " + tablename2 + " DB2 rows:" + str(len(rows2)))
         #
         # return vals
         sames = []
