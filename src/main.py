@@ -1,7 +1,7 @@
-from mysqlx import Schema
 from schema import Database
 from schema.mysql import MySQLDatabase
 from schema.compare import SchemaCompare, TopoSort
+from schema.postgres import PostgresDatabase
 from util.database_credentials import read_credentials_file
 from typing import List
 import click
@@ -13,10 +13,30 @@ import click
 def read_database_from_env(envfile) -> Database:
     dbenv = read_credentials_file(envfile)
     dbname = dbenv['database']
-    db = MySQLDatabase(dbname)
-    db.connect(**dbenv)
-    db.import_schema(dbname)
-    return db
+    if 'type' not in dbenv:
+        dbtype = 'mysql'
+    else:
+        dbtype = dbenv['type']
+        # remove 'type' key from dbenv
+        del dbenv['type']
+    
+    if dbtype == 'mysql':
+        db = MySQLDatabase(dbname)
+        db.connect(**dbenv)
+        db.import_schema(dbname)
+        return db
+    elif dbtype == 'postgres':
+        db = PostgresDatabase(dbname)
+        schemalist = dbenv['schemalist']
+        db.connect(**dbenv)
+
+        schemas = schemalist.split(',')
+        for schema in schemas:
+            db.import_schema(dbname, schema)
+        return db
+    else:
+        raise Exception('Unknown Database Type ' + dbtype)
+
 
 def diff_schema(db1:Database, db2:Database, canonicalize=None):
     cmp = SchemaCompare(db1, db2, canonicalize=canonicalize)
@@ -151,7 +171,7 @@ def str_lower(s:str) -> str:
 def schemadiff():
     pass
 
-@click.command()
+@schemadiff.command()
 @click.argument('db1')
 @click.argument('db2')
 @click.option('--uppercase', '--upper', default=False)
@@ -166,7 +186,7 @@ def diffschema(db1, db2, uppercase, lowercase):
     dbobj2 = read_database_from_env(db2)
     diff_schema(dbobj1, dbobj2, canonicalize)
 
-@click.command()
+@schemadiff.command()
 @click.argument('db1')
 @click.argument('db2')
 def diffprocs(db1, db2):
@@ -174,7 +194,7 @@ def diffprocs(db1, db2):
     dbobj2 = read_database_from_env(db2)
     diff_procs(dbobj1, dbobj2)
 
-@click.command()
+@schemadiff.command()
 @click.argument('db')
 @click.option('--uppercase', '--upper', default=False)
 @click.option('--lowercase', '--lower', default=False)
@@ -188,9 +208,6 @@ def tablelist(db, uppercase, lowercase):
     table_list(dbobj, canonicalize)
 
 
-schemadiff.add_command(diffschema)
-schemadiff.add_command(diffprocs)
-schemadiff.add_command(tablelist)
 
 if __name__ == "__main__":
     schemadiff()

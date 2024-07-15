@@ -3,7 +3,6 @@
 #
 
 from typing import Dict, List
-from unicodedata import name
 from schema import Constraint, Database, Table, Column, Index
 import mysql.connector
 
@@ -83,86 +82,12 @@ class MySQLIndex(Index):
         self.columns.append(coldict)
 
 
-mysql_tables_query = """SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE table_schema = %s"""
-
-mysql_columns_query = """
-    SELECT 
-        TABLE_NAME, COLUMN_NAME, COLUMN_TYPE,
-        COLUMN_KEY, IS_NULLABLE, COLUMN_DEFAULT,
-        ORDINAL_POSITION
-    FROM INFORMATION_SCHEMA.COLUMNS 
-    WHERE table_schema = %s
-    ORDER BY TABLE_NAME, ORDINAL_POSITION"""
-
-mysql_indexes_query = """
-    SELECT 
-        TABLE_NAME, INDEX_NAME, NON_UNIQUE,
-        COLUMN_NAME, COLLATION, SUB_PART, NULLABLE,
-        SEQ_IN_INDEX
-    FROM INFORMATION_SCHEMA.STATISTICS 
-    WHERE table_schema = %s
-    ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX"""
-
-mysql_constraints_query = """
-    SELECT 
-        TABLE_NAME, CONSTRAINT_NAME, CONSTRAINT_TYPE
-    FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS 
-    WHERE table_schema = %s
-    ORDER BY TABLE_NAME, CONSTRAINT_NAME"""
-
-mysql_constraints_columns_query = """
-    SELECT 
-        CONSTRAINT_NAME, TABLE_NAME, 
-        COLUMN_NAME, ORDINAL_POSITION, 
-        POSITION_IN_UNIQUE_CONSTRAINT,
-        REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
-    FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE 
-    WHERE table_schema = %s
-    ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION"""
-
-mysql_routines_query = """
-    SELECT 
-        ROUTINE_NAME, ROUTINE_TYPE, ROUTINE_DEFINITION 
-    FROM INFORMATION_SCHEMA.ROUTINES 
-    WHERE ROUTINE_SCHEMA = %s
-    ORDER BY ROUTINE_NAME"""
-
 class MySQLDatabase(Database):
     def __init__(self, name):
         super().__init__(name)
-        self.tables = dict()
-        self.routines = []
 
     def connect(self, **kwargs):
         self.conn = mysql.connector.connect(**kwargs)
-
-    def reset(self, dbname):
-        self.name = dbname
-        self.tables = dict()
-        self.indexes = dict()
-
-    def get_table(self, tablename) -> Table:
-        if tablename in self.tables:
-            return self.tables[tablename]
-        else:
-            return None
-
-    def get_table_list(self, canonicalize=None) -> List[str]:
-        if canonicalize is None:
-            tablelist = [ table.name for table in self.tables.values() ]
-        else:
-            tablelist = [ canonicalize(table.name) for table in self.tables.values() ]
-        return tablelist
-
-    def get_procedure_list(self) -> List[str]:
-        proclist = [ proc['name'] for proc in self.routines ]
-        return proclist
-
-    def get_procedure(self, name:str) -> dict:
-        for proc in self.routines:
-            if proc['name'] == name:
-                return proc
-        return None
 
     def fetch_table_rows(self, tablename: str, where: str = None, orderby: str = None) -> List[Dict]:
         query = 'SELECT * FROM ' + tablename
@@ -189,17 +114,25 @@ class MySQLDatabase(Database):
 
     def fetch_tables(self, dbname) -> List[Table]:
         dbname = dbname or self.name
+        mysql_tables_query = """SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE table_schema = %s"""
         with self.conn.cursor(dictionary=True) as cursor:
             cursor.execute(mysql_tables_query, (dbname,))
             dbrows = cursor.fetchall()
             tables = []
             for dbrow in dbrows:
                 table = MySQLTable(**dbrow)
-                tables.append(table)
+                self.add_table(table)
             return tables
 
     def fetch_columns(self, dbname) -> List[Column]:
         dbname = dbname or self.name
+        mysql_columns_query = """SELECT 
+                TABLE_NAME, COLUMN_NAME, COLUMN_TYPE,
+                COLUMN_KEY, IS_NULLABLE, COLUMN_DEFAULT,
+                ORDINAL_POSITION
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE table_schema = %s
+            ORDER BY TABLE_NAME, ORDINAL_POSITION"""
         with self.conn.cursor(dictionary=True) as cursor:
             cursor.execute(mysql_columns_query, (dbname,))
             dbrows = cursor.fetchall()
@@ -211,6 +144,13 @@ class MySQLDatabase(Database):
 
     def fetch_index_columns(self, dbname) -> List[Index]:
         dbname = dbname or self.name
+        mysql_indexes_query = """SELECT 
+                TABLE_NAME, INDEX_NAME, NON_UNIQUE,
+                COLUMN_NAME, COLLATION, SUB_PART, NULLABLE,
+                SEQ_IN_INDEX
+            FROM INFORMATION_SCHEMA.STATISTICS 
+            WHERE table_schema = %s
+            ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX"""
         with self.conn.cursor(dictionary=True) as cursor:
             cursor.execute(mysql_indexes_query, (dbname,))
             dbrows = cursor.fetchall()
@@ -218,6 +158,11 @@ class MySQLDatabase(Database):
 
     def fetch_constraints(self, dbname) -> List[Constraint]:
         dbname = dbname or self.name
+        mysql_constraints_query = """SELECT 
+                TABLE_NAME, CONSTRAINT_NAME, CONSTRAINT_TYPE
+            FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS 
+            WHERE table_schema = %s
+            ORDER BY TABLE_NAME, CONSTRAINT_NAME"""        
         with self.conn.cursor(dictionary=True) as cursor:
             cursor.execute(mysql_constraints_query, (dbname,))
             dbrows = cursor.fetchall()
@@ -227,6 +172,14 @@ class MySQLDatabase(Database):
                 constraints.append(constraint)
 
             # fetch column data for constraints
+            mysql_constraints_columns_query = """SELECT 
+                    CONSTRAINT_NAME, TABLE_NAME, 
+                    COLUMN_NAME, ORDINAL_POSITION, 
+                    POSITION_IN_UNIQUE_CONSTRAINT,
+                    REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
+                FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE 
+                WHERE table_schema = %s
+                ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION"""
             cursor.execute(mysql_constraints_columns_query, (dbname,))
             dbrows = cursor.fetchall()
             for dbrow in dbrows:
@@ -258,6 +211,11 @@ class MySQLDatabase(Database):
 
     def fetch_routines(self, dbname) -> List[dict]:
         dbname = dbname or self.name
+        mysql_routines_query = """SELECT 
+                ROUTINE_NAME, ROUTINE_TYPE, ROUTINE_DEFINITION 
+            FROM INFORMATION_SCHEMA.ROUTINES 
+            WHERE ROUTINE_SCHEMA = %s
+            ORDER BY ROUTINE_NAME"""        
         with self.conn.cursor(dictionary=True) as cursor:
             cursor.execute(mysql_routines_query, (dbname,))
             dbrows = cursor.fetchall()

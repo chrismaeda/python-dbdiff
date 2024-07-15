@@ -1,2 +1,5 @@
-mysql-connector-python
 click
+mysql-connector-python
+psycopg[binary]
+python-dotenv
+

@@ -6,7 +6,7 @@ from typing import Dict, List, Tuple
 import copy
 
 class Column:
-    def __init__(self, name, type, tableName=None, nullable=True, primaryKey=False, defaultValue=None, constraints=None, position=None):
+    def __init__(self, name, type, tableName=None, schema=None, nullable=True, primaryKey=False, defaultValue=None, constraints=None, position=None):
         self.name = name
         self.type = type
         self.nullable = nullable
@@ -15,6 +15,7 @@ class Column:
         self.constraints = constraints
         self.position = position
         self.tableName = tableName
+        self.schema = schema
 
     def __eq__(self, __o: object) -> bool:
         if type(self) is not type(__o):
@@ -54,9 +55,10 @@ class Column:
         return colcopy
 
 class Index:
-    def __init__(self, name, tableName):
+    def __init__(self, name, tableName, schema:str = None):
         self.name = name
         self.tableName = tableName
+        self.schema = schema
         self.columns = []
         self.unique = False
 
@@ -109,11 +111,13 @@ class Index:
 
 
 class Constraint:
-    def __init__(self, name:str=None, type:str=None, table:str=None):
+    def __init__(self, name:str=None, schema:str=None, type:str=None, table:str=None):
         self.name = name
+        self.schema = schema
         self.type = type
         self.table = table
         self.columns = []
+        self.reference_schema = None
         self.reference_table = None
         self.reference_columns = None
 
@@ -122,9 +126,11 @@ class Constraint:
             return False
         try:
             return self.name == __o.name \
+                and self.schema == __o.schema \
                 and self.type == __o.type \
                 and self.table == __o.table \
                 and self.columns == __o.columns \
+                and self.reference_schema == __o.reference_schema \
                 and self.reference_table == __o.reference_table \
                 and self.reference_columns == __o.reference_columns
         except:
@@ -147,9 +153,19 @@ class Constraint:
         return concopy
 
 
+class Routine:
+    def __init__(self, name, schema=None, type=None, definition=None):
+        self.name = name
+        self.schema = schema
+        self.type = type
+        self.definition = definition
+        
+    
+
 class Table:
     def __init__(self, name, schema=None, rows=None):
         self.name = name
+        self.schema = schema
         self.columns = []
         self.constraints = []
         self.indexes = []
@@ -158,6 +174,12 @@ class Table:
         self.index_length = 0
         self.auto_increment = None
         self.table_collation = None        
+
+    def get_full_name(self) -> str:
+        if self.schema is not None:
+            return self.schema + '.' + self.name
+        else:
+            return self.name
 
     def get_columns(self) -> List[Column]:
         return self.columns
@@ -176,6 +198,14 @@ class Table:
                 break
         return match
 
+    def get_column_by_position(self, position: int) -> Column:
+        match = None
+        for column in self.columns:
+            if column.position == position:
+                match = column
+                break
+        return match
+
     def get_constraint(self, name:str) -> Constraint:
         for constraint in self.constraints:
             if constraint.name == name:
@@ -188,6 +218,9 @@ class Table:
                 return index
         return None
 
+    def add_index(self, index:Index):
+        self.indexes.append(index)
+        
     def get_primary_key_columns(self) -> List[Column]:
         pklist = [ col for col in self.columns if col.primaryKey ]
         return pklist
@@ -281,22 +314,130 @@ class Table:
 
 class Database:
     def __init__(self, name):
-        self.name = name
+        self.reset(name)
+
+    def reset(self, dbname):
+        self.name = dbname
+        self.tables: Dict[Table] = dict()
+        self.indexes: Dict[Index] = dict()
+        self.routines: Dict[Routine] = dict()
 
     def get_table(self, tablename) -> Table:
-        return None
+        if tablename in self.tables:
+            return self.tables[tablename]
+        else:
+            return None
 
+    def add_table(self, table: Table):
+        self.tables[table.name] = table
+        
+    def add_routine(self, routine: Routine):
+        self.routines[routine.name] = routine
+        
     def get_table_list(self, canonicalize=None) -> List[str]:
+        if canonicalize is None:
+            tablelist = [ table.get_full_name() for table in self.tables.values() ]
+        else:
+            tablelist = [ canonicalize(table.get_full_name()) for table in self.tables.values() ]
+        return tablelist
+
+    def find_constraint(self, name:str) -> Constraint:
+        for table in self.tables.values():
+            constraint = table.get_constraint(name)
+            if constraint is not None:
+                return constraint
         return None
 
     def get_procedure_list(self) -> List[str]:
-        return None
+        proclist = [ proc.name for proc in self.routines.values() ]
+        return proclist
 
-    def get_procedure(self, name:str) -> dict:
-        return None
+    def get_procedure(self, name:str) -> Routine:
+        if name in self.routines:
+            return self.routines[name]
+        else:
+            return None
 
     def fetch_table_rows(self, tablename:str, where:str, orderby:str) -> List[Dict]:
         return None
 
     def fetch_table_rowcount(self, tablename:str, where:str) -> int:
+        return None
+
+
+class SchemaAwareDatabase:
+    def __init__(self, name: str, schemas: List[str] = None, default_schema: str = None):
+        self.reset(name, schemas, default_schema)
+
+    # use a nested Database class to represent a schema
+    class Schema(Database):
+        def __init__(self, name):
+            super().__init__(name)
+
+    def reset(self, dbname: str, schemas: List[str] = None, default_schema: str = None):
+        self.name = dbname
+        self.default_schema = default_schema
+        self.schemas = dict()
+        if schemas is not None:
+            for schema in schemas:
+                self.schemas[schema] = self.Schema(schema)
+
+    def get_table(self, tablename: str, schema: str = None) -> Table:
+        if schema is None:
+            if '.' in tablename:
+                schema, tablename = tablename.split('.')
+            else:
+                schema = self.default_schema
+        dbschema = self.schemas.get(schema)
+        if dbschema is None:
+            raise ValueError(f"Invalid schema: {schema}")
+        return dbschema.get_table(tablename)
+    
+    def add_table(self, table: Table):
+        schema = table.schema
+        dbschema = self.schemas.get(schema)
+        if dbschema is None:
+            dbschema = self.Schema(schema)
+            self.schemas[schema] = dbschema
+        dbschema.add_table(table)
+        
+    def get_table_list(self, canonicalize=None) -> List[str]:
+        # build list of tables from all schemas
+        tablelist = []
+        for schema in self.schemas.values():
+            tablelist.extend(schema.get_table_list(canonicalize))
+        return tablelist
+    
+    def find_constraint(self, name:str, schema:str) -> Constraint:
+        dbschema = self.schemas.get(schema)
+        if dbschema is None:
+            raise ValueError(f"Invalid schema: {schema}")
+        return dbschema.find_constraint(name)
+
+    def get_procedure_list(self) -> List[str]:
+        # build list of procedures from all schemas
+        proclist = []
+        for schema in self.schemas.values():
+            proclist.extend(schema.get_procedure_list())
+        return proclist
+
+    def get_procedure(self, name:str, schema: str = None) -> dict:
+        schema = schema if schema is not None else self.default_schema
+        dbschema = self.schemas.get(schema)
+        if dbschema is None:
+            raise ValueError(f"Invalid schema: {schema}")
+        return dbschema.get_procedure(name)
+
+    def add_routine(self, routine: Routine):
+        schema = routine.schema
+        dbschema = self.schemas.get(schema)
+        if dbschema is None:
+            dbschema = self.Schema(schema)
+            self.schemas[schema] = dbschema
+        dbschema.add_routine(routine)
+        
+    def fetch_table_rows(self, tablename:str, schema:str, where:str, orderby:str) -> List[Dict]:
+        return None
+
+    def fetch_table_rowcount(self, tablename:str, schema:str, where:str) -> int:
         return None
