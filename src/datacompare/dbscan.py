@@ -2,7 +2,7 @@
 # basic reports on database contents
 #
 
-from schema import Database
+from dbdiff.schema import Database
 
 class DatabaseScan:
     def __init__(self, db1:Database, verbose=False):

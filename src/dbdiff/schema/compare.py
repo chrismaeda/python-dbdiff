@@ -3,7 +3,7 @@
 #
 
 from typing import List, Tuple
-from schema import Database, Table
+from . import Database, Table
 
 class SchemaCompare:
     def __init__(self, db1: Database, db2: Database, canonicalize=None) -> None:

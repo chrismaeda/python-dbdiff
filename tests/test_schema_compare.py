@@ -1,6 +1,6 @@
 import pytest
-from schema.compare import SchemaCompare
-from schema.mysql import MySQLDatabase, MySQLTable
+from dbdiff.schema.compare import SchemaCompare
+from dbdiff.schema.mysql import MySQLDatabase, MySQLTable
 
 
 class TestSchemaCompare:

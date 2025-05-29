@@ -3,7 +3,7 @@
 #
 
 from typing import Dict, List
-from schema import Constraint, Database, Table, Column, Index
+from . import Constraint, Database, Table, Column, Index
 import mysql.connector
 
 # Sample record from information_schema.tables
