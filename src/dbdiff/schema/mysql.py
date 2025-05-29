@@ -4,7 +4,11 @@
 
 from typing import Dict, List
 from . import Constraint, Database, Table, Column, Index
-import mysql.connector
+
+try:
+    import mysql.connector  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    mysql = None
 
 # Sample record from information_schema.tables
 # {'TABLE_CATALOG': 'def',
@@ -87,6 +91,8 @@ class MySQLDatabase(Database):
         super().__init__(name)
 
     def connect(self, **kwargs):
+        if mysql is None:  # pragma: no cover - optional dependency
+            raise ImportError("mysql.connector is required for database connections")
         self.conn = mysql.connector.connect(**kwargs)
 
     def fetch_table_rows(self, tablename: str, where: str = None, orderby: str = None) -> List[Dict]:
