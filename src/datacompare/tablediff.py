@@ -4,7 +4,7 @@
 
 from typing import List
 from xml.etree.ElementTree import canonicalize
-from schema import Column, Database
+from dbdiff.schema import Column, Database
 
 
 class TableDiff:

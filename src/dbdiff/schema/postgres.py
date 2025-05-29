@@ -1,5 +1,5 @@
 from typing import List, Dict
-from schema import Column, Constraint, Database, Index, Routine, SchemaAwareDatabase, Table
+from . import Column, Constraint, Database, Index, Routine, SchemaAwareDatabase, Table
 from psycopg.conninfo import make_conninfo
 from psycopg.rows import dict_row
 import psycopg

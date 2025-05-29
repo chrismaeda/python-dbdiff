@@ -1,6 +1,6 @@
 import pytest
 
-from schema.mysql import MySQLColumn
+from dbdiff.schema.mysql import MySQLColumn
 
 class TestMySQLColumn:
     def test_create_column(self):

@@ -1,7 +1,7 @@
-from schema import Database
-from schema.mysql import MySQLDatabase
-from schema.compare import SchemaCompare, TopoSort
-from schema.postgres import PostgresDatabase
+from dbdiff.schema import Database
+from dbdiff.schema.mysql import MySQLDatabase
+from dbdiff.schema.compare import SchemaCompare, TopoSort
+from dbdiff.schema.postgres import PostgresDatabase
 from util.database_credentials import read_credentials_file
 from typing import List
 import click
