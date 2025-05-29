@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "python-dbdiff"
+version = "0.1.0"
+description = "Tools to compare database schemas and table rows."
+readme = "README.md"
+requires-python = ">=3.8"
+license = {file = "LICENSE"}
+dependencies = [
+    "click",
+    "mysql-connector-python",
+    "psycopg[binary]",
+    "python-dotenv",
+]
+
+[project.scripts]
+schemadiff = "main:schemadiff"
+datadiff = "maindata:datadiff"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["datacompare", "schema", "util"]
+
+[project.urls]
+Repository = "https://github.com/example/python-dbdiff"
+
