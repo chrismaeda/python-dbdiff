@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "python-dbdiff"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Tools to compare database schemas and table rows."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -22,6 +22,10 @@ datadiff = "maindata:datadiff"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+py-modules = ["version"]
+
+[tool.setuptools.dynamic]
+version = {attr = "version.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
